@@ -1,91 +1,95 @@
-function doGet(e) {
-  var equipmentId = e.parameter.id; 
-  var action = e.parameter.action || "borrow"; 
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設備清單頁面</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 20px; background-color: #f8f9fa; }
+        .control-group { margin-bottom: 15px; }
+        button { padding: 10px; font-size: 16px; border-radius: 5px; width: 100%; max-width: 300px; border: 1px solid #ccc; cursor: pointer; }
+        
+        .btn-back { background-color: #6c757d; color: white; font-weight: bold; }
+        
+        .btn-tab { background-color: #f8f9fa; color: #333; width: 48%; display: inline-block; font-weight: bold; }
+        .btn-tab.active { background-color: #007bff; color: white; }
+        
+        .panel { max-width: 450px; margin: 15px auto; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: left; }
+        .item-row { padding: 10px; border-bottom: 1px solid #eee; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .status-tag { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .status-available { background-color: #d4edda; color: #155724; }
+        .status-borrowed { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h2>📋 設備清單管理</h2>
+    
+    <!-- 返回首頁掃描按鈕 -->
+    <div class="control-group">
+        <button class="btn-back" onclick="location.href='?page=index'">📷 返回相機掃描頁面</button>
+    </div>
 
-  if (!equipmentId) {
-    return ContentService.createTextOutput("請提供設備 ID，例如：?id=1001&action=borrow");
-  }
+    <!-- 頁籤切換 -->
+    <div class="control-group" style="max-width: 450px; margin: 0 auto 15px auto;">
+        <button id="tab-borrowed" class="btn-tab active" onclick="switchTab('borrowed')">📦 已借出清單</button>
+        <button id="tab-all" class="btn-tab" onclick="switchTab('all')">📚 所有設備總表</button>
+    </div>
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Equipment_List");
-  var data = sheet.getDataRange().getValues();
-  
-  var responseMessage = "";
-  var isUpdated = false;
+    <!-- 清單顯示區塊 -->
+    <div class="panel">
+        <div id="container">載入中...</div>
+    </div>
 
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(equipmentId).trim()) { 
-      var currentStatus = String(data[i][2]).trim();
-      var eqName = data[i][1];
-      var eqBrand = data[i][4];
-      
-      // 如果動作是借用
-      if (action === "borrow") {
-        if (currentStatus === "可借用") { 
-          sheet.getRange(i + 1, 3).setValue("借出中"); 
-          responseMessage = "借用成功！\n" + eqBrand + " " + eqName + "\n狀態已更新為：借出中";
-          isUpdated = true;
-        } else {
-          return ContentService.createTextOutput("借用失敗！該設備目前狀態為：" + currentStatus);
+    <script>
+        // ★★★ 請確認這裡是否為您的 GAS 網頁應用程式網址
+        const API_URL = "https://script.google.com/macros/s/AKfycbx4SDTkvKEwUwMriTVy-NNDQ2g5Yy_SoUbtAwSmPlQISgk9Ie1xOj2FTaU0CaXxWvo-/exec"; 
+        let currentTab = 'borrowed';
+
+        function switchTab(tab) {
+            currentTab = tab;
+            if (tab === 'borrowed') {
+                document.getElementById('tab-borrowed').className = "btn-tab active";
+                document.getElementById('tab-all').className = "btn-tab";
+            } else {
+                document.getElementById('tab-all').className = "btn-tab active";
+                document.getElementById('tab-borrowed').className = "btn-tab";
+            }
+            loadData();
         }
-      } 
-      // 如果動作是歸還
-      else if (action === "return") {
-        if (currentStatus === "借出中") { 
-          sheet.getRange(i + 1, 3).setValue("可借用"); 
-          responseMessage = "歸還成功！\n" + eqBrand + " " + eqName + "\n狀態已更新為：可借用";
-          isUpdated = true;
-        } else {
-          return ContentService.createTextOutput("歸還失敗！該設備目前狀態為：" + currentStatus + "（未在借出狀態）");
+
+        function loadData() {
+            const container = document.getElementById('container');
+            container.innerHTML = "正在載入資料...";
+            const actionParam = currentTab === 'borrowed' ? 'get_borrowed' : 'get_all';
+
+            fetch(`${API_URL}?action=${actionParam}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        container.innerHTML = "<div style='text-align:center; color:#666; padding: 20px;'>目前沒有相關資料</div>";
+                        return;
+                    }
+                    
+                    let html = "";
+                    data.forEach(item => {
+                        if (currentTab === 'borrowed') {
+                            html += `<div class="item-row"><span>🏷️ <b>[${item.id}]</b> ${item.brand || ''} ${item.name}</span></div>`;
+                        } else {
+                            const statusClass = item.status === "可借用" ? "status-available" : "status-borrowed";
+                            html += `<div class="item-row">
+                                <span>🏷️ <b>[${item.id}]</b> ${item.brand || ''} ${item.name}</span>
+                                <span class="status-tag ${statusClass}">${item.status}</span>
+                            </div>`;
+                        }
+                    });
+                    container.innerHTML = html;
+                })
+                .catch(error => {
+                    container.innerHTML = "<span style='color:red;'>載入失敗，請確認網路連線。</span>";
+                });
         }
-      }
-      break; // 找到對應設備後即可跳出迴圈
-    }
-  }
 
-  if (!responseMessage) {
-    return ContentService.createTextOutput("找不到設備編號：" + equipmentId);
-  }
-
-  // 若成功更新狀態，自動更新「已借出清單」分頁
-  if (isUpdated) {
-    updateBorrowedListSheet(ss);
-  }
-
-  return ContentService.createTextOutput(responseMessage);
-}
-
-// 📌 自動將「借出中」的設備更新至 Borrowed_List 分頁
-function updateBorrowedListSheet(ss) {
-  var sourceSheet = ss.getSheetByName("Equipment_List");
-  var targetSheet = ss.getSheetByName("Borrowed_List");
-  
-  // 若分頁不存在則自動建立
-  if (!targetSheet) {
-    targetSheet = ss.insertSheet("Borrowed_List");
-  }
-  
-  // 清空目標分頁舊資料
-  targetSheet.clear();
-  
-  var data = sourceSheet.getDataRange().getValues();
-  var borrowedData = [];
-  
-  // 複製標題列 (第一列)
-  if (data.length > 0) {
-    borrowedData.push(data[0]);
-  }
-  
-  // 篩選出狀態為「借出中」的資料
-  for (var i = 1; i < data.length; i++) {
-    var status = String(data[i][2]).trim();
-    if (status === "借出中") {
-      borrowedData.push(data[i]);
-    }
-  }
-  
-  // 寫入目標分頁
-  if (borrowedData.length > 0) {
-    targetSheet.getRange(1, 1, borrowedData.length, borrowedData[0].length).setValues(borrowedData);
-  }
-}
+        loadData();
+    </script>
+</body>
+</html>
